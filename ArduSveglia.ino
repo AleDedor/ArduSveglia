@@ -1,0 +1,836 @@
+#include<Wire.h> /*connessione I2C*/
+#include<RTClib.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
+RTC_DS3231 myRTC; /*definizione tipo struct RTC_DS3231*/
+
+#define P1 2
+#define P2 3
+#define P3 4
+
+#define ONOFF 7
+#define RED  11
+#define GREEN  10
+#define BLUE 9
+#define buzzer 6
+#define LCD 5
+
+int8_t secondi = 0, alarmHH = 0, alarmMM = 0;     /* CLOCK */
+bool flagT, rtc, alarm = false, lcdon = true;    /* FLAG */
+int8_t page = 0, sel = 0, pressed, LED = LOW, count = 0;
+int8_t tempo = 85;                                /* melody */
+DateTime data;
+
+/*definizione dei caratteri LCD BIGFONT 2.0*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+byte full1[8]{
+  B00111,
+  B01111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+};
+
+byte halfdown[8]{
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B11111,
+  B11111,
+  B11111,
+};
+
+byte halfup[8]{
+  B11111,
+  B11111,
+  B11111,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+};
+
+byte full2[8]{
+  B11100,
+  B11110,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+};
+
+byte semi[8]{
+  B11111,
+  B11111,
+  B11111,
+  B00000,
+  B00000,
+  B00000,
+  B11111,
+  B11111,
+};
+
+byte full3[8]{
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B01111,
+  B00111,
+};
+
+byte point[8]{
+  B00000,
+  B00000,
+  B00000,
+  B01100,
+  B01100,
+  B00000,
+  B00000,
+  B00000,
+};
+
+byte full4[8]{
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11110,
+  B11100,
+};
+
+/* COLORI E SUNRISE*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void black(){
+  analogWrite(RED, 0);
+  analogWrite(GREEN, 0);
+  analogWrite(BLUE, 0);
+}
+
+void Sunrise(int8_t delta){
+  /*BLUE -> VIOLA -> ROSSO -> ARANCIO -> GIALLO -> BIANCO*/
+  
+  if(delta <= 15 && delta >= 14){
+      analogWrite(BLUE, 255);
+  }
+  
+  if(delta < 14 && delta >= 12 ){
+      analogWrite(RED, 255);
+  }
+  
+  if(delta < 12 && delta >= 10 ){
+      analogWrite(BLUE, 0);
+  }
+
+  if(delta < 10 && delta >= 8 ){
+      analogWrite(GREEN, 40);
+  }
+
+  if(delta < 8 && delta >= 5 ){
+      analogWrite(GREEN, 70);
+  }
+
+  if(delta < 5 && delta >= 0 ){
+      analogWrite(BLUE, 255);
+      analogWrite(RED, 255);
+      analogWrite(GREEN, 255);
+  }
+  
+}
+
+
+
+/* NOTE MUSICALI e ALARM SONG*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+#define NOTE_B0  31
+#define NOTE_C1  33
+#define NOTE_CS1 35
+#define NOTE_D1  37
+#define NOTE_DS1 39
+#define NOTE_E1  41
+#define NOTE_F1  44
+#define NOTE_FS1 46
+#define NOTE_G1  49
+#define NOTE_GS1 52
+#define NOTE_A1  55
+#define NOTE_AS1 58
+#define NOTE_B1  62
+#define NOTE_C2  65
+#define NOTE_CS2 69
+#define NOTE_D2  73
+#define NOTE_DS2 78
+#define NOTE_E2  82
+#define NOTE_F2  87
+#define NOTE_FS2 93
+#define NOTE_G2  98
+#define NOTE_GS2 104
+#define NOTE_A2  110
+#define NOTE_AS2 117
+#define NOTE_B2  123
+#define NOTE_C3  131
+#define NOTE_CS3 139
+#define NOTE_D3  147
+#define NOTE_DS3 156
+#define NOTE_E3  165
+#define NOTE_F3  175
+#define NOTE_FS3 185
+#define NOTE_G3  196
+#define NOTE_GS3 208
+#define NOTE_A3  220
+#define NOTE_AS3 233
+#define NOTE_B3  247
+#define NOTE_C4  262
+#define NOTE_CS4 277
+#define NOTE_D4  294
+#define NOTE_DS4 311
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_FS4 370
+#define NOTE_G4  392
+#define NOTE_GS4 415
+#define NOTE_A4  440
+#define NOTE_AS4 466
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_CS5 554
+#define NOTE_D5  587
+#define NOTE_DS5 622
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_FS5 740
+#define NOTE_G5  784
+#define NOTE_GS5 831
+#define NOTE_A5  880
+#define NOTE_AS5 932
+#define NOTE_B5  988
+#define NOTE_C6  1047
+#define NOTE_CS6 1109
+#define NOTE_D6  1175
+#define NOTE_DS6 1245
+#define NOTE_E6  1319
+#define NOTE_F6  1397
+#define NOTE_FS6 1480
+#define NOTE_G6  1568
+#define NOTE_GS6 1661
+#define NOTE_A6  1760
+#define NOTE_AS6 1865
+#define NOTE_B6  1976
+#define NOTE_C7  2093
+#define NOTE_CS7 2217
+#define NOTE_D7  2349
+#define NOTE_DS7 2489
+#define NOTE_E7  2637
+#define NOTE_F7  2794
+#define NOTE_FS7 2960
+#define NOTE_G7  3136
+#define NOTE_GS7 3322
+#define NOTE_A7  3520
+#define NOTE_AS7 3729
+#define NOTE_B7  3951
+#define NOTE_C8  4186
+#define NOTE_CS8 4435
+#define NOTE_D8  4699
+#define NOTE_DS8 4978
+#define REST      0
+
+int melody[] = {
+
+  // Jigglypuff's Song
+  // Score available at https://musescore.com/user/28109683/scores/5044153
+  
+  NOTE_D5,-4, NOTE_A5,8, NOTE_FS5,8, NOTE_D5,8,
+  NOTE_E5,-4, NOTE_FS5,8, NOTE_G5,4,
+  NOTE_FS5,-4, NOTE_E5,8, NOTE_FS5,4,
+  NOTE_D5,-2,
+  NOTE_D5,-4, NOTE_A5,8, NOTE_FS5,8, NOTE_D5,8,
+  NOTE_E5,-4, NOTE_FS5,8, NOTE_G5,4,
+  NOTE_FS5,-1,
+  NOTE_D5,-4, NOTE_A5,8, NOTE_FS5,8, NOTE_D5,8,
+  NOTE_E5,-4, NOTE_FS5,8, NOTE_G5,4,
+  
+  NOTE_FS5,-4, NOTE_E5,8, NOTE_FS5,4,
+  NOTE_D5,-2,
+  NOTE_D5,-4, NOTE_A5,8, NOTE_FS5,8, NOTE_D5,8,
+  NOTE_E5,-4, NOTE_FS5,8, NOTE_G5,4,
+  NOTE_FS5,-1,
+  
+};
+
+int notes = sizeof(melody) / sizeof(melody[0]) / 2;
+int wholenote = (60000 * 4) / tempo;
+int divider = 0, noteDuration = 0;
+
+
+/*SETUP, INIZIALIZZAZIONE*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void setup() {
+    
+  /*PIN IN/OUT */
+  pinMode(P1, INPUT);
+  pinMode(P2, INPUT);
+  pinMode(P3, INPUT);
+  pinMode(LCD, OUTPUT);
+  pinMode(ONOFF, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(RED, OUTPUT);
+  pinMode(GREEN, OUTPUT);
+  pinMode(BLUE, OUTPUT);
+
+  /*RTC INIT*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(! myRTC.begin()) /*restituisce TRUE FALSE se RTC connesso, serve per INIZIALIZZAZIONE MODULO*/
+    rtc = false;
+    
+  if(myRTC.lostPower()){ /*inizializza per la prima volta RTC se ha perso i dati*/
+    myRTC.adjust(DateTime(2021, 01, 19, 19, 27, 00)); /*date solo da 2000 al 2100*/
+  }
+  /*DateTime è un'altra variabile tipo di libreria, variabile data YYYY/MM/DD */
+  data = myRTC.now();
+  secondi = data.second();
+  flagT = true;
+  analogWrite(LCD, 150);
+
+  /*LCD INIT*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  lcd.init();
+  lcd.backlight();
+  lcd.createChar(0,full1);
+  lcd.createChar(1,halfdown);
+  lcd.createChar(2,halfup);
+  lcd.createChar(3,full2);
+  lcd.createChar(4,semi);
+  lcd.createChar(5,full3);
+  lcd.createChar(6,point);
+  lcd.createChar(7,full4);
+  lcd.clear();
+
+}
+
+/*DEFINIZIONE SIMBOLI LCD*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void num0(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(0)); /*full*/
+  lcd.write(byte(2)); /*halfup*/
+  lcd.write(byte(3)); /*full*/
+  lcd.setCursor(col,1);
+  lcd.write(byte(5)); /*full*/
+  lcd.write(byte(1)); /*halfdown*/
+  lcd.write(byte(7)); /*full*/ 
+}
+
+void num1(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(2));
+  lcd.write(byte(3));
+  lcd.write(B00100000);     /*blank, tutto spento*/
+  lcd.setCursor(col,1);
+  lcd.write(byte(1));
+  lcd.write(255);
+  lcd.write(byte(1)); 
+}
+
+void num2(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(4));
+  lcd.write(byte(4));
+  lcd.write(byte(3));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(5));
+  lcd.write(byte(1));
+  lcd.write(byte(1)); 
+}
+
+void num3(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(4));
+  lcd.write(byte(4));
+  lcd.write(byte(3));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(1));
+  lcd.write(byte(1));
+  lcd.write(byte(7)); 
+}
+
+void num4(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(5));
+  lcd.write(byte(1));
+  lcd.write(255);    
+  lcd.setCursor(col,1);
+  lcd.write(B00100000);
+  lcd.write(B00100000);
+  lcd.write(255); 
+}
+
+void num5(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(0));
+  lcd.write(byte(4));
+  lcd.write(byte(4));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(1));
+  lcd.write(byte(1));
+  lcd.write(byte(7)); 
+}
+
+void num6(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(0));
+  lcd.write(byte(4));
+  lcd.write(byte(4));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(5));
+  lcd.write(byte(1));
+  lcd.write(byte(7)); 
+}
+
+void num7(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(2));
+  lcd.write(byte(2));
+  lcd.write(byte(3));    
+  lcd.setCursor(col,1);
+  lcd.write(B00100000);
+  lcd.write(B00100000);
+  lcd.write(255); 
+}
+
+void num8(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(0));
+  lcd.write(byte(4));
+  lcd.write(byte(3));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(5));
+  lcd.write(byte(1));
+  lcd.write(byte(7)); 
+}
+
+void num9(int8_t col){
+  lcd.setCursor(col,0);
+  lcd.write(byte(0));
+  lcd.write(byte(4));
+  lcd.write(byte(3));    
+  lcd.setCursor(col,1);
+  lcd.write(byte(1));
+  lcd.write(byte(1));
+  lcd.write(byte(7)); 
+}
+
+/*CONVERSIONE DI INTERO IN RECIPROCO CARATTERE*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void select(int8_t val, int8_t x){
+  switch(val){
+    case 0:
+      num0(x);
+      break;
+    case 1:
+      num1(x);
+      break;
+    case 2:
+      num2(x);
+      break;
+    case 3:
+      num3(x);
+      break;
+    case 4:
+      num4(x);
+      break;
+    case 5:
+      num5(x);
+      break;
+    case 6:
+      num6(x);
+      break;
+    case 7:
+      num7(x);
+      break;
+    case 8:
+      num8(x);
+      break;
+    case 9:
+      num9(x);
+    break;
+  }
+}
+
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void stampaTemp(float num){
+  
+  int col=0, dec=0, unit=0, temp=0, decim=0;
+  /*segno*/
+  lcd.setCursor(col,0);
+  if(num<0){
+    num=-num;
+    lcd.write(byte(3));  }
+  else
+    lcd.write(B00100000);
+    
+  /*trasformo in intero a 2/3 cifre così posso usare operatore resto%*/
+  temp = num*10;
+
+  decim = temp%10;
+  temp = temp/10;
+  unit = temp%10;
+  temp = temp/10;
+  dec = temp%10;
+  
+  col=col+2;
+  lcd.setCursor(col,0);
+  select(dec,col);
+  
+  col = col+4;
+  lcd.setCursor(col,0);
+  select(unit, col);
+
+  col = col+4;
+  lcd.setCursor(col,1);
+  lcd.write(byte(1));
+
+  col=col+2;
+  lcd.setCursor(col,0);
+  select(decim, col);
+
+  col=col+3;
+  lcd.setCursor(col,0);
+  lcd.write(byte(6));
+}
+
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void stampaTime(int8_t ore, int8_t minuti){
+  
+  int col=0, Hdec=0, Hunit=0, Mdec=0, Munit=0;
+  /*segno*/
+  lcd.setCursor(col,0);
+    
+  /*trasformo in intero a 2/3 cifre così posso usare operatore resto%*/
+  Hunit = ore%10;
+  Hdec = ore/10;
+  Munit = minuti%10;
+  Mdec = minuti/10;
+  
+  select(Hdec,col);
+  
+  col = col+4;
+  lcd.setCursor(col,0);
+  select(Hunit, col);
+
+  col = col+3;
+  lcd.setCursor(col,0);
+  lcd.write(byte(6));
+  lcd.setCursor(col,1);
+  lcd.write(byte(6));
+
+  col=col+1;
+  lcd.setCursor(col,0);
+  select(Mdec, col);
+
+  col=col+4;
+  lcd.setCursor(col,0);
+  select(Munit, col);
+}
+
+void printDate(int8_t num){
+  if(num >= 10)
+    lcd.print(num);
+  else{
+    lcd.print("0");
+    lcd.print(num);
+  }
+    
+}
+
+void stampaDate(int8_t dd, int8_t mm, int yyyy){
+  lcd.clear();
+  lcd.setCursor(3,0);
+  printDate(dd);    lcd.print('/');   printDate(mm);    lcd.print('/');   lcd.print(yyyy);
+  
+  lcd.setCursor(4,1);
+
+  switch(mm){
+    case 1:   lcd.print("GENNAIO");     break;
+    case 2:   lcd.print("FEBBRAIO");    break;
+    case 3:   lcd.print("MARZO");       break;
+    case 4:   lcd.print("APRILE");      break;
+    case 5:   lcd.print("MAGGIO");      break;
+    case 6:   lcd.print("GIUGNO");      break;
+    case 7:   lcd.print("LUGLIO");      break;
+    case 8:   lcd.print("AGOSTO");      break;
+    case 9:   lcd.print("SETTEMBRE");   break;
+    case 10:   lcd.print("OTTOBRE");    break;
+    case 11:   lcd.print("NOVEMBRE");   break;
+    case 12:   lcd.print("DICEMBRE");   break;
+    default: break;
+  }
+
+  lcd.setCursor(15,1);
+  lcd.print(sel);
+  
+}
+
+void AlarmOFF(){ 
+     noTone(buzzer);
+     alarm = false;
+     digitalWrite(ONOFF, alarm);
+}
+
+int8_t difference(int8_t HH, int8_t MM, int8_t alHH, int8_t alMM){
+  if(alHH == HH && alMM >= MM)
+    return alMM - MM;
+  else if(alHH == (HH + 1) && alMM <= MM)
+    return alMM - MM + 60;
+  else
+    return 100;
+}
+
+/*verifica che sia ora notturna*/
+bool night(int8_t ore){
+  if((ore >= 23 && ore < 24) || (ore < 7 && ore >= 0))
+    return true;
+  else 
+    return false;
+}
+
+void lcd_light(bool light){
+  if(light)
+    analogWrite(LCD, 255);
+  else
+    analogWrite(LCD, 30);
+}
+
+/*MAIN*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void loop() {
+
+  int giorno, mese, anno = 2021, ore, minuti; /*inizializzare le variabili nel loop è un problema!!! */
+  
+  data = myRTC.now();   /*restituisce data attuale trovata nell'rtc*/
+  float temp = myRTC.getTemperature();
+  
+  giorno = data.day();
+  mese = data.month();
+  anno = data.year();
+  ore = data.hour();
+  minuti = data.minute();
+  int8_t delta = difference(ore, minuti, alarmHH, alarmMM);
+  lcd_light(lcdon);
+
+  /* introduco questo pezzo di programma per spegnere il display durante la notte, si accende solo con la pressione di P1 */
+  if(night(ore) && count == 0){
+    if(ore != alarmHH || minuti != alarmMM){
+      
+      if(digitalRead(P1) == HIGH){
+        delay(200);
+        if(digitalRead(P1) == LOW)
+          lcdon = true;
+          count = minuti;
+          delay(200);
+      }
+      else if(minuti - count < 1 && minuti - count >= 0 )
+        lcdon = true;
+      else{
+        lcdon = false;
+        count = 0;
+      }
+        
+    }
+    
+    else if(ore == alarmHH && minuti == alarmMM)
+      lcdon = true;  
+  }
+
+  if(minuti - count > 1 && night(ore))
+    count = 0;
+  
+/*posso accedere a menù solo se il display è acceso! */  
+if(lcdon || !night(ore)){
+  
+  /*VISUALIZZAZIONE MENU' , polling per verificare se viene modificata la visualizzazione*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(digitalRead(P1) == HIGH){
+    delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento della selezione, 0.2 secondi per distinguere da Pressed a longPressed*/
+    if(digitalRead(P1) == LOW){
+      if(page == 3)
+        page = 0;
+      else
+        page++;
+    }
+
+    else if(digitalRead(P1) == HIGH && page == 2){ /*longPressed*/
+      pressed = data.second();
+      while(digitalRead(P1) == HIGH && (data.second() - pressed) <= 1){
+          delay(10); 
+        }
+        alarm = !alarm;
+        digitalWrite(ONOFF, alarm);
+      }
+  }
+
+  
+  /*TIME SET , polling per verificare se viene modificata l'ora*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(digitalRead(P2) == HIGH && page == 0){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(ore == 23)
+        ore = 0;
+      else
+        ore = ore + 1; /*adjust(datetime(..)) richiede parametri char */
+      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+    }
+  }
+
+    /*polling per verificare se vengono modificati i minuti*/
+  if(digitalRead(P3) == HIGH && page == 0){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(minuti == 59)
+        minuti = 0;
+      else
+        minuti = minuti + 1; /*adjust(datetime(..)) richiede parametri char */
+      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+    }
+  }
+
+   /*ALARM SET , imposto AlarmClock, Hour*/
+   /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(digitalRead(P2) == HIGH && page == 2){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(alarmHH == 23)
+        alarmHH = 0;
+      else
+        alarmHH = alarmHH + 1;
+    }
+  }
+
+     /*imposto AlarmClock, Minutes*/
+  if(digitalRead(P3) == HIGH && page == 2){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(alarmMM == 59)
+        alarmMM = 0;
+      else
+        alarmMM = alarmMM + 1;
+    }
+  }
+
+  if(digitalRead(P2) == HIGH && page == 3){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(sel == 2)
+        sel = 0;
+      else
+        sel = sel + 1;
+    }
+  }
+
+  if(digitalRead(P3) == HIGH && page == 3 && sel == 0){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(alarmHH == 31)
+        giorno = 0;
+      else
+        giorno = giorno + 1;
+      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+    }
+  }
+
+  if(digitalRead(P3) == HIGH && page == 3 && sel == 1){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+      if(mese == 12)
+        mese = 0;
+      else
+        mese = mese + 1;
+      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+    }
+  }
+
+  if(digitalRead(P3) == HIGH && page == 3 && sel == 2){
+    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+        anno = anno + 1;
+        myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+    }
+  }
+}
+  /*stampo solo ogni secondo, senza delay che ferma arduino*/
+  /*attenzione!!! se i secondi si azzerano?? */
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if((data.second() == secondi + 1 || data.second() == 0) && !flagT )
+    flagT = true;
+  if((data.second() == secondi + 1 || data.second() == 0) && flagT ){
+    /*stampa secondi*/
+    secondi = data.second();
+    flagT = false;
+
+    lcd.clear();
+    
+    if(page == 0){
+      stampaTime(ore, minuti);
+    }
+    else if(page == 1){
+      stampaTemp(temp);
+    }
+    else if(page == 2){
+      stampaTime(alarmHH, alarmMM);
+    }
+
+    else if(page == 3){
+      stampaDate(giorno, mese, anno);
+    }
+
+  }
+  /* da ripetere finchè non viene premuto il pulsante P1*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+   
+      if(delta <= 15 && delta > 0 && alarm == true)/*ok*/
+        {
+          Sunrise(delta);/*no*/
+        }
+        else
+          black();
+    
+      if(ore == alarmHH && minuti == alarmMM && alarm == true ){
+           /*continua l'allarme finchè non preme P1 */
+           int thisNote = 0;
+          do{
+            divider = melody[thisNote + 1];
+              if(digitalRead(P1) == HIGH){ 
+                    AlarmOFF();
+                    goto STOPALARM;
+                }
+            if (divider > 0) {
+              noteDuration = (wholenote) / divider;
+            } 
+            else if (divider < 0) {
+              noteDuration = (wholenote) / abs(divider);
+              noteDuration *= 1.1; 
+            }
+              tone(buzzer, melody[thisNote], noteDuration * 0.9);
+
+              delay(noteDuration);
+              noTone(buzzer);
+              thisNote = thisNote + 2;
+              
+            }while( thisNote < notes * 2 && alarm);
+  /*forse no interrupt, magari uso un polling durante la melodia che fa uscire immediatamente dal ciclo!! ora, la melodia non parte più sempre con la sveglia!!*/
+    }
+STOPALARM:
+delay(1);
+}

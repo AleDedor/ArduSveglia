@@ -1,9 +1,10 @@
-#include<Wire.h> /*connessione I2C*/
+
+#include<Wire.h>                                        /*connessione I2C*/
 #include<RTClib.h>
 #include <LiquidCrystal_I2C.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2); 
-RTC_DS3231 myRTC; /*definizione tipo struct RTC_DS3231*/
+RTC_DS3231 myRTC;                             /*definizione tipo struct RTC_DS3231*/
 
 #define P1 2
 #define P2 3
@@ -16,10 +17,11 @@ RTC_DS3231 myRTC; /*definizione tipo struct RTC_DS3231*/
 #define buzzer 6
 #define LCD 5
 
-int8_t secondi = 0, alarmHH = 0, alarmMM = 0;     /* CLOCK */
-bool flagT, rtc, alarm = false, lcdon = true;    /* FLAG */
-int8_t page = 0, sel = 0, pressed, LED = LOW, count = 0;
-int8_t tempo = 85;                                /* melody */
+int8_t secondi = 0, alarmHH = 0, alarmMM = 0;               /* CLOCK */
+bool flagT, rtc, alarm = false, lcdon = true;               /* FLAGS */
+bool P1_old_state = false, P2_old_state = false, P3_old_state = false;    /* LOOK FOR CHANGE IN STATE WITH POLLING*/
+int8_t page = 0, select_param = 0, pressed, LED = LOW, press_time = 0;
+int8_t tempo = 85;                                          /* melody */
 DateTime data;
 
 /*definizione dei caratteri LCD BIGFONT 2.0*/
@@ -121,28 +123,27 @@ void black(){
 }
 
 void Sunrise(int8_t delta){
-  /*BLUE -> VIOLA -> ROSSO -> ARANCIO -> GIALLO -> BIANCO*/
-  
+  /* BLUE */
   if(delta <= 15 && delta >= 14){
       analogWrite(BLUE, 255);
   }
-  
+  /* VIOLET*/
   if(delta < 14 && delta >= 12 ){
       analogWrite(RED, 255);
   }
-  
+  /* RED */
   if(delta < 12 && delta >= 10 ){
       analogWrite(BLUE, 0);
   }
-
+  /* ORANGE */
   if(delta < 10 && delta >= 8 ){
       analogWrite(GREEN, 40);
   }
-
+  /* YELLOW */
   if(delta < 8 && delta >= 5 ){
       analogWrite(GREEN, 70);
   }
-
+  /* WHITE */
   if(delta < 5 && delta >= 0 ){
       analogWrite(BLUE, 255);
       analogWrite(RED, 255);
@@ -273,52 +274,6 @@ int notes = sizeof(melody) / sizeof(melody[0]) / 2;
 int wholenote = (60000 * 4) / tempo;
 int divider = 0, noteDuration = 0;
 
-
-/*SETUP, INIZIALIZZAZIONE*/
-/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-void setup() {
-    
-  /*PIN IN/OUT */
-  pinMode(P1, INPUT);
-  pinMode(P2, INPUT);
-  pinMode(P3, INPUT);
-  pinMode(LCD, OUTPUT);
-  pinMode(ONOFF, OUTPUT);
-  pinMode(buzzer, OUTPUT);
-  pinMode(RED, OUTPUT);
-  pinMode(GREEN, OUTPUT);
-  pinMode(BLUE, OUTPUT);
-
-  /*RTC INIT*/
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  if(! myRTC.begin()) /*restituisce TRUE FALSE se RTC connesso, serve per INIZIALIZZAZIONE MODULO*/
-    rtc = false;
-    
-  if(myRTC.lostPower()){ /*inizializza per la prima volta RTC se ha perso i dati*/
-    myRTC.adjust(DateTime(2021, 01, 19, 19, 27, 00)); /*date solo da 2000 al 2100*/
-  }
-  /*DateTime è un'altra variabile tipo di libreria, variabile data YYYY/MM/DD */
-  data = myRTC.now();
-  secondi = data.second();
-  flagT = true;
-  analogWrite(LCD, 150);
-
-  /*LCD INIT*/
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  lcd.init();
-  lcd.backlight();
-  lcd.createChar(0,full1);
-  lcd.createChar(1,halfdown);
-  lcd.createChar(2,halfup);
-  lcd.createChar(3,full2);
-  lcd.createChar(4,semi);
-  lcd.createChar(5,full3);
-  lcd.createChar(6,point);
-  lcd.createChar(7,full4);
-  lcd.clear();
-
-}
-
 /*DEFINIZIONE SIMBOLI LCD*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void num0(int8_t col){
@@ -433,7 +388,7 @@ void num9(int8_t col){
 
 /*CONVERSIONE DI INTERO IN RECIPROCO CARATTERE*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-void select(int8_t val, int8_t x){
+void select_paramect(uint8_t val, uint8_t x){
   switch(val){
     case 0:
       num0(x);
@@ -471,7 +426,7 @@ void select(int8_t val, int8_t x){
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void stampaTemp(float num){
   
-  int col=0, dec=0, unit=0, temp=0, decim=0;
+  uint8_t col=0, dec=0, unit=0, temp=0, decim=0;
   /*segno*/
   lcd.setCursor(col,0);
   if(num<0){
@@ -491,11 +446,11 @@ void stampaTemp(float num){
   
   col=col+2;
   lcd.setCursor(col,0);
-  select(dec,col);
+  select_paramect(dec,col);
   
   col = col+4;
   lcd.setCursor(col,0);
-  select(unit, col);
+  select_paramect(unit, col);
 
   col = col+4;
   lcd.setCursor(col,1);
@@ -503,7 +458,7 @@ void stampaTemp(float num){
 
   col=col+2;
   lcd.setCursor(col,0);
-  select(decim, col);
+  select_paramect(decim, col);
 
   col=col+3;
   lcd.setCursor(col,0);
@@ -511,9 +466,9 @@ void stampaTemp(float num){
 }
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-void stampaTime(int8_t ore, int8_t minuti){
+void stampaTime(uint8_t ore, uint8_t minuti){
   
-  int col=0, Hdec=0, Hunit=0, Mdec=0, Munit=0;
+  uint8_t col=0, Hdec=0, Hunit=0, Mdec=0, Munit=0;
   /*segno*/
   lcd.setCursor(col,0);
     
@@ -523,11 +478,11 @@ void stampaTime(int8_t ore, int8_t minuti){
   Munit = minuti%10;
   Mdec = minuti/10;
   
-  select(Hdec,col);
+  select_paramect(Hdec,col);
   
   col = col+4;
   lcd.setCursor(col,0);
-  select(Hunit, col);
+  select_paramect(Hunit, col);
 
   col = col+3;
   lcd.setCursor(col,0);
@@ -537,14 +492,14 @@ void stampaTime(int8_t ore, int8_t minuti){
 
   col=col+1;
   lcd.setCursor(col,0);
-  select(Mdec, col);
+  select_paramect(Mdec, col);
 
   col=col+4;
   lcd.setCursor(col,0);
-  select(Munit, col);
+  select_paramect(Munit, col);
 }
 
-void printDate(int8_t num){
+void printDate(uint8_t num){ /* zero padding*/
   if(num >= 10)
     lcd.print(num);
   else{
@@ -554,7 +509,7 @@ void printDate(int8_t num){
     
 }
 
-void stampaDate(int8_t dd, int8_t mm, int yyyy){
+void stampaDate(uint8_t dd, uint8_t mm, int yyyy){
   lcd.clear();
   lcd.setCursor(3,0);
   printDate(dd);    lcd.print('/');   printDate(mm);    lcd.print('/');   lcd.print(yyyy);
@@ -578,7 +533,7 @@ void stampaDate(int8_t dd, int8_t mm, int yyyy){
   }
 
   lcd.setCursor(15,1);
-  lcd.print(sel);
+  lcd.print(select_param);
   
 }
 
@@ -588,23 +543,33 @@ void AlarmOFF(){
      digitalWrite(ONOFF, alarm);
 }
 
-int8_t difference(int8_t HH, int8_t MM, int8_t alHH, int8_t alMM){
-  if(alHH == HH && alMM >= MM)
-    return alMM - MM;
-  else if(alHH == (HH + 1) && alMM <= MM)
-    return alMM - MM + 60;
+/* time remaining between now() and fixed time */
+int8_t time_remaining(uint8_t nowHH, uint8_t nowMM, uint8_t refHH, uint8_t refMM){
+  if(refHH == nowHH && refMM >= nowMM)
+    return refMM - nowMM;
+  else if(refHH == (nowHH + 1) && refMM <= nowMM)
+    return refMM - nowMM + 60;
   else
     return 100;
 }
 
+/* time passed between now() and fixed time, in seconds */
+int8_t time_passed(uint8_t nowSec, uint8_t refSec){
+  if(nowSec >= refSec)
+    return nowSec - refSec;
+  else if(nowSec < refSec)
+    return nowSec - refSec + 60;
+}
+
 /*verifica che sia ora notturna*/
-bool night(int8_t ore){
-  if((ore >= 23 && ore < 24) || (ore < 7 && ore >= 0))
+bool night(uint8_t ore){
+  if((ore >= 23) || (ore < 7))
     return true;
   else 
     return false;
 }
 
+/* control lcd brightness according to day time */
 void lcd_light(bool light){
   if(light)
     analogWrite(LCD, 255);
@@ -612,225 +577,278 @@ void lcd_light(bool light){
     analogWrite(LCD, 30);
 }
 
+/*SETUP, INIZIALIZZAZIONE*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+void setup() {
+    
+  /*PIN IN/OUT */
+  pinMode(P1, INPUT);
+  pinMode(P2, INPUT);
+  pinMode(P3, INPUT);
+  pinMode(LCD, OUTPUT);
+  pinMode(ONOFF, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(RED, OUTPUT);
+  pinMode(GREEN, OUTPUT);
+  pinMode(BLUE, OUTPUT);
+
+  /*RTC INIT*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(!myRTC.begin()) /*restituisce TRUE FALSE se RTC connesso, serve per INIZIALIZZAZIONE MODULO*/
+    rtc = false;
+    
+  if(myRTC.lostPower()){ /*inizializza per la prima volta RTC se ha perso i dati*/
+    myRTC.adjust(DateTime(2021, 04, 11, 19, 27, 00)); /*date solo da 2000 al 2100*/
+  }
+  /*DateTime è un'altra variabile tipo di libreria, variabile data YYYY/MM/DD */
+  data = myRTC.now();
+  secondi = data.second();
+  flagT = true;
+  analogWrite(LCD, 150);
+
+  /*LCD INIT*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  lcd.init();
+  lcd.backlight();
+  lcd.createChar(0,full1);
+  lcd.createChar(1,halfdown);
+  lcd.createChar(2,halfup);
+  lcd.createChar(3,full2);
+  lcd.createChar(4,semi);
+  lcd.createChar(5,full3);
+  lcd.createChar(6,point);
+  lcd.createChar(7,full4);
+  lcd.clear();
+
+} /* end setup */
+
 /*MAIN*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void loop() {
 
-  int giorno, mese, anno = 2021, ore, minuti; /*inizializzare le variabili nel loop è un problema!!! */
-  
+  uint8_t giorno, mese, ore, minuti; /*inizializzare le variabili nel loop è un problema!!! */
+  int anno;
+  float temp;
+
+  /* retrieve data from RTC module */
   data = myRTC.now();   /*restituisce data attuale trovata nell'rtc*/
-  float temp = myRTC.getTemperature();
+  temp = myRTC.getTemperature();
   
   giorno = data.day();
   mese = data.month();
   anno = data.year();
   ore = data.hour();
   minuti = data.minute();
-  int8_t delta = difference(ore, minuti, alarmHH, alarmMM);
+
+  /* compute time remaining to alarm*/
+  int8_t delta = time_remaining(ore, minuti, alarmHH, alarmMM);
+
+  /* assign value to lcd brightness */
   lcd_light(lcdon);
 
   /* introduco questo pezzo di programma per spegnere il display durante la notte, si accende solo con la pressione di P1 */
-  if(night(ore) && count == 0){
+  if(night(ore)){
     if(ore != alarmHH || minuti != alarmMM){
-      
-      if(digitalRead(P1) == HIGH){
-        delay(200);
-        if(digitalRead(P1) == LOW)
-          lcdon = true;
-          count = minuti;
-          delay(200);
-      }
-      else if(minuti - count < 1 && minuti - count >= 0 )
+
+      if(digitalRead(P1) == HIGH  && P1_old_state == false){
+        P1_old_state = true;
         lcdon = true;
-      else{
+        press_time = secondi; /* capture here the current value */
+      } else if(time_passed(secondi, press_time) < 5){
+        lcdon = true;         /* if button has just been pressed, leave lcd on for 5 sec */
+      } else {
         lcdon = false;
-        count = 0;
+        press_time = 0;
       }
-        
+
+      if(digitalRead(P1) == LOW  && P1_old_state == true){
+        P1_old_state = false;        
+      }     
+
+    } else if(ore == alarmHH && minuti == alarmMM){   /* turn on always @ alarm */
+      lcdon = true; 
     }
+  }
+  
+  /*posso accedere a menù solo se il display è acceso! */  
+  if(!night(ore) || lcdon){
     
-    else if(ore == alarmHH && minuti == alarmMM)
-      lcdon = true;  
-  }
-
-  if(minuti - count > 1 && night(ore))
-    count = 0;
-  
-/*posso accedere a menù solo se il display è acceso! */  
-if(lcdon || !night(ore)){
-  
-  /*VISUALIZZAZIONE MENU' , polling per verificare se viene modificata la visualizzazione*/
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  if(digitalRead(P1) == HIGH){
-    delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento della selezione, 0.2 secondi per distinguere da Pressed a longPressed*/
-    if(digitalRead(P1) == LOW){
-      if(page == 3)
-        page = 0;
-      else
-        page++;
-    }
-
-    else if(digitalRead(P1) == HIGH && page == 2){ /*longPressed*/
-      pressed = data.second();
-      while(digitalRead(P1) == HIGH && (data.second() - pressed) <= 1){
-          delay(10); 
-        }
-        alarm = !alarm;
-        digitalWrite(ONOFF, alarm);
-      }
-  }
-
-  
-  /*TIME SET , polling per verificare se viene modificata l'ora*/
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  if(digitalRead(P2) == HIGH && page == 0){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(ore == 23)
-        ore = 0;
-      else
-        ore = ore + 1; /*adjust(datetime(..)) richiede parametri char */
-      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
-    }
-  }
-
-    /*polling per verificare se vengono modificati i minuti*/
-  if(digitalRead(P3) == HIGH && page == 0){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(minuti == 59)
-        minuti = 0;
-      else
-        minuti = minuti + 1; /*adjust(datetime(..)) richiede parametri char */
-      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
-    }
-  }
-
-   /*ALARM SET , imposto AlarmClock, Hour*/
-   /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  if(digitalRead(P2) == HIGH && page == 2){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(alarmHH == 23)
-        alarmHH = 0;
-      else
-        alarmHH = alarmHH + 1;
-    }
-  }
-
-     /*imposto AlarmClock, Minutes*/
-  if(digitalRead(P3) == HIGH && page == 2){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(alarmMM == 59)
-        alarmMM = 0;
-      else
-        alarmMM = alarmMM + 1;
-    }
-  }
-
-  if(digitalRead(P2) == HIGH && page == 3){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(sel == 2)
-        sel = 0;
-      else
-        sel = sel + 1;
-    }
-  }
-
-  if(digitalRead(P3) == HIGH && page == 3 && sel == 0){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(alarmHH == 31)
-        giorno = 0;
-      else
-        giorno = giorno + 1;
-      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
-    }
-  }
-
-  if(digitalRead(P3) == HIGH && page == 3 && sel == 1){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-      if(mese == 12)
-        mese = 0;
-      else
-        mese = mese + 1;
-      myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
-    }
-  }
-
-  if(digitalRead(P3) == HIGH && page == 3 && sel == 2){
-    delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
-    if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
-        anno = anno + 1;
-        myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
-    }
-  }
-}
-  /*stampo solo ogni secondo, senza delay che ferma arduino*/
-  /*attenzione!!! se i secondi si azzerano?? */
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-  if((data.second() == secondi + 1 || data.second() == 0) && !flagT )
-    flagT = true;
-  if((data.second() == secondi + 1 || data.second() == 0) && flagT ){
-    /*stampa secondi*/
-    secondi = data.second();
-    flagT = false;
-
-    lcd.clear();
-    
-    if(page == 0){
-      stampaTime(ore, minuti);
-    }
-    else if(page == 1){
-      stampaTemp(temp);
-    }
-    else if(page == 2){
-      stampaTime(alarmHH, alarmMM);
-    }
-
-    else if(page == 3){
-      stampaDate(giorno, mese, anno);
-    }
-
-  }
-  /* da ripetere finchè non viene premuto il pulsante P1*/
-  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-   
-      if(delta <= 15 && delta > 0 && alarm == true)/*ok*/
-        {
-          Sunrise(delta);/*no*/
-        }
+    /*VISUALIZZAZIONE MENU' , polling per verificare se viene modificata la visualizzazione*/
+    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    if(digitalRead(P1) == HIGH){
+      delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento della select_paramezione, 0.2 secondi per distinguere da Pressed a longPressed*/
+      if(digitalRead(P1) == LOW){
+        if(page == 3)
+          page = 0;
         else
-          black();
-    
-      if(ore == alarmHH && minuti == alarmMM && alarm == true ){
-           /*continua l'allarme finchè non preme P1 */
-           int thisNote = 0;
-          do{
-            divider = melody[thisNote + 1];
-              if(digitalRead(P1) == HIGH){ 
-                    AlarmOFF();
-                    goto STOPALARM;
-                }
-            if (divider > 0) {
-              noteDuration = (wholenote) / divider;
-            } 
-            else if (divider < 0) {
-              noteDuration = (wholenote) / abs(divider);
-              noteDuration *= 1.1; 
-            }
-              tone(buzzer, melody[thisNote], noteDuration * 0.9);
+          page++;
+      }
+      
+      if(digitalRead(P1) == HIGH && page == 2){ /*longPressed*/
+        pressed = secondi;
 
-              delay(noteDuration);
-              noTone(buzzer);
-              thisNote = thisNote + 2;
-              
-            }while( thisNote < notes * 2 && alarm);
-  /*forse no interrupt, magari uso un polling durante la melodia che fa uscire immediatamente dal ciclo!! ora, la melodia non parte più sempre con la sveglia!!*/
+        if(time_passed(secondi, pressed) >= 2)
+          alarm = !alarm;
+          digitalWrite(ONOFF, alarm);
+        }
     }
-STOPALARM:
-delay(1);
+    /* PAGE 0, VIEW HOURS */
+
+    /*TIME SET , polling per verificare se viene modificata l'ora*/
+    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    if(page == 0){
+      if(digitalRead(P2) == HIGH){  /* P2, change hours*/
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          if(ore == 23)
+            ore = 0;
+          else
+            ore = ore + 1; /*adjust(datetime(..)) richiede parametri char */
+          myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+        }
+      }
+
+        /*polling per verificare se vengono modificati i minuti*/
+      if(digitalRead(P3) == HIGH){  /* P3, CHANGE MINUTES */
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          if(minuti == 59)
+            minuti = 0;
+          else
+            minuti = minuti + 1; /*adjust(datetime(..)) richiede parametri char */
+          myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+        }
+      }
+    }
+
+    /*PAGE 2, ALARM SET , imposto AlarmClock, Hour*/
+    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    if(page == 2){
+      if(digitalRead(P2) == HIGH){
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          if(alarmHH == 23)
+            alarmHH = 0;
+          else
+            alarmHH = alarmHH + 1;
+        }
+      }
+
+        /*imposto AlarmClock, Minutes*/
+      if(digitalRead(P3) == HIGH){
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          if(alarmMM == 59)
+            alarmMM = 0;
+          else
+            alarmMM = alarmMM + 1;
+        }
+      }
+    }
+
+    /* PAGE 3, VIEW DATE*/
+    /* select the parameter you want to change*/
+    if(page == 3){
+      if(digitalRead(P2) == HIGH){
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          if(select_param == 2)
+            select_param = 0;
+          else
+            select_param = select_param + 1;
+        }
+      }
+
+      if(digitalRead(P3) == HIGH){
+        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
+          
+          if(select_paramect == 0){
+            if(giorno == 32)
+              giorno = 0;
+            else
+              giorno = giorno + 1;
+          }
+
+          if(select_paramect == 1){
+            if(mese == 12)
+              mese = 0;
+            else
+              mese = mese + 1;
+          }
+
+          if(select_param == 2){
+            anno = anno + 1;
+          }
+          
+          myRTC.adjust(DateTime(anno, mese, giorno, ore, minuti, secondi));
+        }
+      }
+    }
+    
+    /*stampo solo ogni secondo, senza delay che ferma arduino*/
+    /*attenzione!!! se i secondi si azzerano?? */
+    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    if((data.second() == secondi + 1 || data.second() == 0) && !flagT )
+      flagT = true;
+    if((data.second() == secondi + 1 || data.second() == 0) && flagT ){
+      /*stampa secondi*/
+      secondi = data.second();
+      flagT = false;
+
+      lcd.clear();
+      
+      if(page == 0){
+        stampaTime(ore, minuti);
+      }
+      else if(page == 1){
+        stampaTemp(temp);
+      }
+      else if(page == 2){
+        stampaTime(alarmHH, alarmMM);
+      }
+
+      else if(page == 3){
+        stampaDate(giorno, mese, anno);
+      }
+
+    }
+    /* da ripetere finchè non viene premuto il pulsante P1*/
+    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    
+        if(delta <= 15 && delta > 0 && alarm == true)/*ok*/
+          {
+            Sunrise(delta);/*no*/
+          }
+          else
+            black();
+      
+        if(ore == alarmHH && minuti == alarmMM && alarm == true ){
+            /*continua l'allarme finchè non preme P1 */
+            int thisNote = 0;
+            do{
+              divider = melody[thisNote + 1];
+                if(digitalRead(P1) == HIGH){ 
+                      AlarmOFF();
+                      goto STOPALARM;
+                  }
+              if (divider > 0) {
+                noteDuration = (wholenote) / divider;
+              } 
+              else if (divider < 0) {
+                noteDuration = (wholenote) / abs(divider);
+                noteDuration *= 1.1; 
+              }
+                tone(buzzer, melody[thisNote], noteDuration * 0.9);
+
+                delay(noteDuration);
+                noTone(buzzer);
+                thisNote = thisNote + 2;
+                
+              }while( thisNote < notes * 2 && alarm);
+    /*forse no interrupt, magari uso un polling durante la melodia che fa uscire immediatamente dal ciclo!! ora, la melodia non parte più sempre con la sveglia!!*/
+      }
+  STOPALARM:
+  delay(1);
+  }
 }

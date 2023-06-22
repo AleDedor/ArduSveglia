@@ -1,7 +1,10 @@
+/* ################### INCLUDES ############################ */
 
 #include<Wire.h>                                        /*connessione I2C*/
 #include<RTClib.h>
 #include <LiquidCrystal_I2C.h>
+
+/* ################### CONSTANT, VARIABLES ############################ */
 
 LiquidCrystal_I2C lcd(0x27, 16, 2); 
 RTC_DS3231 myRTC;                             /*definizione tipo struct RTC_DS3231*/
@@ -10,6 +13,11 @@ RTC_DS3231 myRTC;                             /*definizione tipo struct RTC_DS32
 #define P2 3
 #define P3 4
 
+#define TIME 0
+#define TEMP 1
+#define ALARM 2
+#define DATE 3
+
 #define ONOFF 7
 #define RED  11
 #define GREEN  10
@@ -17,14 +25,14 @@ RTC_DS3231 myRTC;                             /*definizione tipo struct RTC_DS32
 #define buzzer 6
 #define LCD 5
 
-int8_t secondi = 0, alarmHH = 0, alarmMM = 0;               /* CLOCK */
-bool flagT, rtc, alarm = false, lcdon = true;               /* FLAGS */
+uint8_t alarmHH = 0, alarmMM = 0;                                  /* CLOCK */
+bool flagT = true, rtc, alarm = false, lcdon = true;               /* FLAGS */
 bool P1_old_state = false, P2_old_state = false, P3_old_state = false;    /* LOOK FOR CHANGE IN STATE WITH POLLING*/
-int8_t page = 0, select_param = 0, pressed, LED = LOW, press_time = 0;
-int8_t tempo = 85;                                          /* melody */
+int8_t page = 0, select_param = 0, pressed, LED = LOW, press_time = 0 , timer_count_ISR = 0;
+int8_t tempo = 85;                                                  /* melody */
 DateTime data;
 
-/*definizione dei caratteri LCD BIGFONT 2.0*/
+/* LCD BIGFONT 2.0*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 byte full1[8]{
   B00111,
@@ -114,7 +122,7 @@ byte full4[8]{
   B11100,
 };
 
-/* COLORI E SUNRISE*/
+/* RGB COLOURS*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void black(){
   analogWrite(RED, 0);
@@ -154,7 +162,7 @@ void Sunrise(int8_t delta){
 
 
 
-/* NOTE MUSICALI e ALARM SONG*/
+/* MUSICAL NOTES, ALARM SONG*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 #define NOTE_B0  31
 #define NOTE_C1  33
@@ -274,7 +282,7 @@ int notes = sizeof(melody) / sizeof(melody[0]) / 2;
 int wholenote = (60000 * 4) / tempo;
 int divider = 0, noteDuration = 0;
 
-/*DEFINIZIONE SIMBOLI LCD*/
+/* LCD SYMBOLS */
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void num0(int8_t col){
   lcd.setCursor(col,0);
@@ -386,7 +394,7 @@ void num9(int8_t col){
   lcd.write(byte(7)); 
 }
 
-/*CONVERSIONE DI INTERO IN RECIPROCO CARATTERE*/
+/* INTEGER TO CHAR ONTO LCD*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void select_paramect(uint8_t val, uint8_t x){
   switch(val){
@@ -423,17 +431,13 @@ void select_paramect(uint8_t val, uint8_t x){
   }
 }
 
+/* ################### PROGRAM CUSTOM FUNCTIONS ############################ */
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void stampaTemp(float num){
   
   uint8_t col=0, dec=0, unit=0, temp=0, decim=0;
   /*segno*/
   lcd.setCursor(col,0);
-  if(num<0){
-    num=-num;
-    lcd.write(byte(3));  }
-  else
-    lcd.write(B00100000);
     
   /*trasformo in intero a 2/3 cifre così posso usare operatore resto%*/
   temp = num*10;
@@ -444,22 +448,27 @@ void stampaTemp(float num){
   temp = temp/10;
   dec = temp%10;
   
+  /* decina */
   col=col+2;
   lcd.setCursor(col,0);
   select_paramect(dec,col);
   
+  /* unità */
   col = col+4;
   lcd.setCursor(col,0);
   select_paramect(unit, col);
 
+  /* dot */
   col = col+4;
   lcd.setCursor(col,1);
   lcd.write(byte(1));
 
+  /* decimale */
   col=col+2;
   lcd.setCursor(col,0);
   select_paramect(decim, col);
 
+  /* degree */
   col=col+3;
   lcd.setCursor(col,0);
   lcd.write(byte(6));
@@ -509,7 +518,7 @@ void printDate(uint8_t num){ /* zero padding*/
     
 }
 
-void stampaDate(uint8_t dd, uint8_t mm, int yyyy){
+void stampaDate(uint8_t dd, uint8_t mm, uint16_t yyyy){
   lcd.clear();
   lcd.setCursor(3,0);
   printDate(dd);    lcd.print('/');   printDate(mm);    lcd.print('/');   lcd.print(yyyy);
@@ -577,7 +586,7 @@ void lcd_light(bool light){
     analogWrite(LCD, 30);
 }
 
-/*SETUP, INIZIALIZZAZIONE*/
+/*/* ################### SETUP, INITIALIZATION ############################ */
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void setup() {
     
@@ -592,18 +601,33 @@ void setup() {
   pinMode(GREEN, OUTPUT);
   pinMode(BLUE, OUTPUT);
 
+  /* INTERNAL TIMER1 INIT */
+  cli(); // disable interrupts during setup
+  // Configure Timer 1 interrupt
+  // F_clock = 16e6 Hz, prescaler = 64, Fs = 100 Hz
+  TCCR1A = 0;
+  TCCR1B = 1<<WGM12 | 0<<CS12 | 1<<CS11 | 1<<CS10;
+  TCNT1 = 0;          // reset Timer 1 counter
+  // OCR1A = ((F_clock / prescaler) / Fs) - 1 = 2499
+  OCR1A = 2499;       // Set sampling frequency Fs = 100 Hz
+  TIMSK1 = 1<<OCIE1A; // Enable Timer 1 interrupt
+ 
+  sei(); // re-enable interrupts
+
   /*RTC INIT*/
   /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  
   if(!myRTC.begin()) /*restituisce TRUE FALSE se RTC connesso, serve per INIZIALIZZAZIONE MODULO*/
     rtc = false;
-    
-  if(myRTC.lostPower()){ /*inizializza per la prima volta RTC se ha perso i dati*/
-    myRTC.adjust(DateTime(2021, 04, 11, 19, 27, 00)); /*date solo da 2000 al 2100*/
+
+  myRTC.adjust(DateTime(2023, 6, 22, 17, 30, 0)); /*date solo da 2000 al 2100*/
+
+  /*inizializza per la prima volta RTC se ha perso i dati*/  
+  if(myRTC.lostPower()){ 
+    myRTC.adjust(DateTime(2023, 6, 22, 16, 30, 0));
   }
+
   /*DateTime è un'altra variabile tipo di libreria, variabile data YYYY/MM/DD */
-  data = myRTC.now();
-  secondi = data.second();
-  flagT = true;
   analogWrite(LCD, 150);
 
   /*LCD INIT*/
@@ -620,14 +644,28 @@ void setup() {
   lcd.createChar(7,full4);
   lcd.clear();
 
-} /* end setup */
+} 
+
+/* ################### END SETUP ############################ */
+
+// Timer 1 interrupt service routine (ISR)
+// timer @100 Hz thus 1 sec is 100 interrupt events
+ISR(TIMER1_COMPA_vect)
+{
+  timer_count_ISR += 1;
+  if(timer_count_ISR == 100){
+    timer_count_ISR = 0;
+    flagT = true;         /* enable lcd update */
+  }
+}
 
 /*MAIN*/
 /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 void loop() {
 
-  uint8_t giorno, mese, ore, minuti; /*inizializzare le variabili nel loop è un problema!!! */
-  int anno;
+  uint8_t giorno, mese, ore, minuti, secondi; /*inizializzare le variabili nel loop è un problema!!! */
+  uint8_t night_FSM;
+  uint16_t anno;
   float temp;
 
   /* retrieve data from RTC module */
@@ -639,6 +677,7 @@ void loop() {
   anno = data.year();
   ore = data.hour();
   minuti = data.minute();
+  secondi = data.second();
 
   /* compute time remaining to alarm*/
   int8_t delta = time_remaining(ore, minuti, alarmHH, alarmMM);
@@ -648,33 +687,38 @@ void loop() {
 
   /* introduco questo pezzo di programma per spegnere il display durante la notte, si accende solo con la pressione di P1 */
   if(night(ore)){
-    if(ore != alarmHH || minuti != alarmMM){
+    if(ore != alarmHH || minuti != alarmMM){ /* if it's not alarm time */
 
-      if(digitalRead(P1) == HIGH  && P1_old_state == false){
-        P1_old_state = true;
+      if(digitalRead(P1) == HIGH || digitalRead(P2) == HIGH || digitalRead(P3) == HIGH){  /* if button 1 is pressed than lcd on */
         lcdon = true;
-        press_time = secondi; /* capture here the current value */
-      } else if(time_passed(secondi, press_time) < 5){
-        lcdon = true;         /* if button has just been pressed, leave lcd on for 5 sec */
-      } else {
+        press_time = secondi;
+        night_FSM = 1;
+      } 
+      
+      if(night_FSM == 1){
+        if(time_passed(secondi, press_time) > 5){
+          night_FSM = 2;
+        }
+      }
+
+      if(night_FSM == 2) {
+        night_FSM = 0;
         lcdon = false;
         press_time = 0;
       }
-
-      if(digitalRead(P1) == LOW  && P1_old_state == true){
-        P1_old_state = false;        
-      }     
 
     } else if(ore == alarmHH && minuti == alarmMM){   /* turn on always @ alarm */
       lcdon = true; 
     }
   }
   
-  /*posso accedere a menù solo se il display è acceso! */  
+  /* ACCESS TO THE MENU CONTROL IF DAY OR IF A BUTTON WAS PRESSED */  
   if(!night(ore) || lcdon){
     
     /*VISUALIZZAZIONE MENU' , polling per verificare se viene modificata la visualizzazione*/
     /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+    
+    /* CAMBIO PAGINA VISUALIZZATA */
     if(digitalRead(P1) == HIGH){
       delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento della select_paramezione, 0.2 secondi per distinguere da Pressed a longPressed*/
       if(digitalRead(P1) == LOW){
@@ -683,22 +727,15 @@ void loop() {
         else
           page++;
       }
-      
-      if(digitalRead(P1) == HIGH && page == 2){ /*longPressed*/
-        pressed = secondi;
-
-        if(time_passed(secondi, pressed) >= 2)
-          alarm = !alarm;
-          digitalWrite(ONOFF, alarm);
-        }
     }
+      
     /* PAGE 0, VIEW HOURS */
 
     /*TIME SET , polling per verificare se viene modificata l'ora*/
     /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-    if(page == 0){
+    if(page == TIME){
       if(digitalRead(P2) == HIGH){  /* P2, change hours*/
-        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        delay(200);               
         if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
           if(ore == 23)
             ore = 0;
@@ -710,7 +747,7 @@ void loop() {
 
         /*polling per verificare se vengono modificati i minuti*/
       if(digitalRead(P3) == HIGH){  /* P3, CHANGE MINUTES */
-        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
         if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
           if(minuti == 59)
             minuti = 0;
@@ -723,7 +760,19 @@ void loop() {
 
     /*PAGE 2, ALARM SET , imposto AlarmClock, Hour*/
     /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-    if(page == 2){
+    if(page == ALARM){
+      if(digitalRead(P1) == HIGH && P1_old_state == false){ /*longPressed*/
+        pressed = secondi;
+        P1_old_state = true;
+      }
+      if(time_passed(secondi, pressed) > 2 && digitalRead(P1) == HIGH){
+          alarm = !alarm;
+          digitalWrite(ONOFF, alarm);
+          P1_old_state = false;
+      }
+      if(digitalRead(P1) == LOW)
+        P1_old_state = false;
+
       if(digitalRead(P2) == HIGH){
         delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
         if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
@@ -736,7 +785,7 @@ void loop() {
 
         /*imposto AlarmClock, Minutes*/
       if(digitalRead(P3) == HIGH){
-        delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
+        delay(200);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
         if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
           if(alarmMM == 59)
             alarmMM = 0;
@@ -748,7 +797,7 @@ void loop() {
 
     /* PAGE 3, VIEW DATE*/
     /* select the parameter you want to change*/
-    if(page == 3){
+    if(page == DATE){
       if(digitalRead(P2) == HIGH){
         delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
         if(digitalRead(P2) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
@@ -763,14 +812,14 @@ void loop() {
         delay(100);                 /*l'introduzione di un delay per vedere se il pulsante è rilasciato stabilizza il funzionamento dell'incremento*/
         if(digitalRead(P3) == LOW){ /*altrimenti, a causa della velocità di lettura del pin, per alcuni istanti troverebbe sempre pin HIGH e incrementa tante volte in pochi millisec*/
           
-          if(select_paramect == 0){
+          if(select_param == 0){
             if(giorno == 32)
               giorno = 0;
             else
               giorno = giorno + 1;
           }
 
-          if(select_paramect == 1){
+          if(select_param == 1){
             if(mese == 12)
               mese = 0;
             else
@@ -785,70 +834,64 @@ void loop() {
         }
       }
     }
+  }
     
-    /*stampo solo ogni secondo, senza delay che ferma arduino*/
-    /*attenzione!!! se i secondi si azzerano?? */
-    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-    if((data.second() == secondi + 1 || data.second() == 0) && !flagT )
-      flagT = true;
-    if((data.second() == secondi + 1 || data.second() == 0) && flagT ){
-      /*stampa secondi*/
-      secondi = data.second();
-      flagT = false;
+  /*OK, vengo dalla Timer 1 ISR, stampo solo ogni secondo, senza delay che ferma arduino*/
+  /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+  if(flagT == true){
 
-      lcd.clear();
-      
-      if(page == 0){
-        stampaTime(ore, minuti);
-      }
-      else if(page == 1){
-        stampaTemp(temp);
-      }
-      else if(page == 2){
-        stampaTime(alarmHH, alarmMM);
-      }
+    flagT = false;
 
-      else if(page == 3){
-        stampaDate(giorno, mese, anno);
-      }
-
+    lcd.clear();
+        
+    if(page == TIME){
+      stampaTime(ore, minuti);
     }
-    /* da ripetere finchè non viene premuto il pulsante P1*/
-    /*----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-    
-        if(delta <= 15 && delta > 0 && alarm == true)/*ok*/
-          {
-            Sunrise(delta);/*no*/
-          }
-          else
-            black();
-      
-        if(ore == alarmHH && minuti == alarmMM && alarm == true ){
-            /*continua l'allarme finchè non preme P1 */
-            int thisNote = 0;
-            do{
-              divider = melody[thisNote + 1];
-                if(digitalRead(P1) == HIGH){ 
-                      AlarmOFF();
-                      goto STOPALARM;
-                  }
-              if (divider > 0) {
-                noteDuration = (wholenote) / divider;
-              } 
-              else if (divider < 0) {
-                noteDuration = (wholenote) / abs(divider);
-                noteDuration *= 1.1; 
-              }
-                tone(buzzer, melody[thisNote], noteDuration * 0.9);
+    else if(page == TEMP){
+      stampaTemp(temp);
+    }
+    else if(page == ALARM){
+      stampaTime(alarmHH, alarmMM);
+    }
+    else if(page == DATE){
+      stampaDate(giorno, mese, anno);
+    }
+  }
 
-                delay(noteDuration);
-                noTone(buzzer);
-                thisNote = thisNote + 2;
-                
-              }while( thisNote < notes * 2 && alarm);
-    /*forse no interrupt, magari uso un polling durante la melodia che fa uscire immediatamente dal ciclo!! ora, la melodia non parte più sempre con la sveglia!!*/
+  if(delta <= 15 && delta > 0 && alarm == true){
+    Sunrise(delta);/*no*/
+  } else {
+    black();
+  }
+      
+  if(ore == alarmHH && minuti == alarmMM && alarm == true ){
+    /*continua l'allarme finchè non preme P1 */
+    int thisNote = 0;
+    do{
+      divider = melody[thisNote + 1];
+      if(digitalRead(P1) == HIGH){ 
+        AlarmOFF();
+        goto STOPALARM;
       }
+      if (divider > 0) {
+        noteDuration = (wholenote) / divider;
+      } 
+      else if (divider < 0) {
+        noteDuration = (wholenote) / abs(divider);
+        noteDuration *= 1.1; 
+      }
+      tone(buzzer, melody[thisNote], noteDuration * 0.9);
+
+      delay(noteDuration);
+      noTone(buzzer);
+      thisNote = thisNote + 2;
+                
+    }while( thisNote < notes * 2 && alarm);
+    /*forse no interrupt, magari uso un polling durante la melodia che fa uscire immediatamente dal ciclo!! ora, la melodia non parte più sempre con la sveglia!!*/
+  }
   STOPALARM:
   delay(1);
-  }
+ 
+
+
 }

@@ -1,5 +1,8 @@
 # ArduSveglia
-Code for an alarm clock based on arduino nano Atmega328 and an RTC module DS3231
+DS3231 RTC module Alarm clock based, featuring an arduino nano Atmega328.
+Simple but effective code, written in a Super-Loop style.
+An LCD display is used along with its I2C module for communication. 
+Big Fonts are integrated inside the project because also eyes life matter.
 
 3 buttons to set all parameters:
 
@@ -31,7 +34,7 @@ On page 3 (DATE):
     2: use P3 to increment year
 - P3: increment values
 
-A RGB led is light up 15 minutes before alarm turns on, different colours will shouw up to simulate sunrise
+A RGB led is light up 15 minutes before alarm turns on, different colours will show up to simulate sunrise
 A buzzer is used to play an alarm. Long press P1 to turn off the alarm when ringing.
 
 
